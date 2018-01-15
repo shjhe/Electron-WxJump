@@ -1,5 +1,10 @@
 <template>
-  
+  <div class="wx-jump-wrapper">
+    <el-button type="primary">开始</el-button>
+    <div class="logger-wrapper">
+      <p class="logger-item" v-for="item in loggers" :key="item">{{item}}</p>
+    </div>
+  </div>
 </template>
 <script>
   // const Images = require('images')
@@ -10,7 +15,10 @@
   const Image = {}
   export default {
     data () {
-      return {}
+      return {
+        btnState: true,
+        loggers: []
+      }
     },
     methods: {
       getCenterPoint () {
@@ -140,4 +148,16 @@
     }
   }
 </script>
+<style lang="scss" scoped>
+  .wx-jump-wrapper{
+    .btn-start{
 
+    }
+    .logger-wrapper{
+      width: 600px;
+      height: 400px;
+      border: 1px solid #ccc;
+      overflow-y: auto;
+    }
+  }
+</style>
