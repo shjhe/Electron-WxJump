@@ -1,43 +1,63 @@
 <template>
   <div class="wx-jump-wrapper">
-    <el-button type="primary">开始</el-button>
-    <div class="logger-wrapper">
-      <p class="logger-item" v-for="item in loggers" :key="item">{{item}}</p>
+    <el-button type="primary" @click="wxJump">开始</el-button>
+    <el-button type="default" @click="stopJump">停止</el-button>
+    <!-- <div class="image-wrapper">
+      <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
+        top: tip.top/2 + 'px',
+        left: tip.left/2 + 'px'
+      }"></span>
+      <img :key="imageData" :src="`${DIR_STATIC}/wxJumpTemp.png?v=${imageData}`" width="50%">
+    </div> -->
+    <div class="logger-wrapper" ref="loggerRef">
+      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
     </div>
   </div>
 </template>
 <script>
-  // const Images = require('images')
-  import ImageMagick from 'imagemagick'
+  let path = require('path')
   import Shell from 'shelljs'
   import GetPixels from 'get-pixels'
-  import { PHONE_SETTING }  from '@/config'
-  const Image = {}
+  import { PHONE_SETTING, IMG_SETTING }  from '@/config'
+  // const DIR_PATH = path.join(__static, '../../../../')
+  const DIR_PATH = __static
+  const IMG_PATH = path.join(DIR_PATH, IMG_SETTING.NAME)
+  Shell.config.silent = true
+  Shell.config.execPath = 'C:\\WINDOWS\\system32\\cmd.exe' // 'C:\\Program Files\\nodejs\\node.exe'
   export default {
     data () {
       return {
+        DIR_STATIC: DIR_PATH,
+        imageData: '',
+        imageState: true,
         btnState: true,
-        loggers: []
+        loggers: [],
+        imageRandom: Math.random(),
+        tips: []
       }
     },
+    created () {
+      window.tyler = this
+      console.log(__static)
+    },
     methods: {
-      getCenterPoint () {
-        GetPixels(LOCAL_IMG_PATH + IMG_NAME, function(err, pixels) {
+      getCenterPoint (callback) {
+        GetPixels(IMG_PATH, (err, pixels) => {
           if(err) {
-            console.log("Bad image path")
+            this.loggers.push(JSON.stringify(err))
             return
           }
-          let data = find_poit(pixels, img)
+          let data = this.findPoint(pixels)
           callback(data)
         })
       },
-      findPoint () {
+      findPoint (pixels) {
         let piece_x_sum = 0,
             piece_x_c = 0,
             piece_y_max = 0,
             board_x = 0,
             board_y = 0;
-        let { width, height } = img.size()
+        let { width, height } = this.$image.getSize()
         for(var y = 0; y < height; y++) {
           for(var x = 0; x < width; x ++) {
             var pixel0 = pixels.get(x, y, 0),
@@ -53,8 +73,8 @@
         if (!piece_x_sum || !piece_x_c) {
           return [0,0,0,0]
         }
-        piece_x = piece_x_sum / piece_x_c;
-        piece_y = piece_y_max - 20;  // 上移棋子底盘高度的一半
+        let piece_x = piece_x_sum / piece_x_c;
+        let piece_y = piece_y_max - 20;  // 上移棋子底盘高度的一半
 
 
         for (var y = 0; y < height; y++){
@@ -67,8 +87,8 @@
           var last_pixel0 = pixels.get(0, y, 0);
           var last_pixel1 = pixels.get(0, y, 1);
           var last_pixel2 = pixels.get(0, y, 2);
-          board_x_sum = 0
-          board_x_c = 0
+          let board_x_sum = 0
+          let board_x_c = 0
           for (var x = 0; x < width; x++) {
             var pixel0 = pixels.get(x, y, 0),
                 pixel1 = pixels.get(x, y, 1),
@@ -95,11 +115,12 @@
       },
       upLoadImg () {
         return new Promise((resolve) => {
-          console.info('>>>>>>>>>>>截取图片')
-          Shell.exec(`adb shell screencap -p /sdcard/${IMG_NAME}`, () => {
-            console.info('>>>>>>>>>>>上传图片')
-            Shell.exec(`adb pull /sdcard/${IMG_NAME}`, () => {
-              console.info('>>>>>>>>>>>图片上传完成')
+          this.loggers.unshift('>>>>>>>>>>>截取图片')
+          Shell.exec(`adb shell screencap -p /sdcard/${IMG_SETTING.NAME}`, () => {
+            this.loggers.unshift('>>>>>>>>>>>上传图片')
+            Shell.exec(`adb pull /sdcard/${IMG_SETTING.NAME} ${this.DIR_STATIC}`, () => {
+              this.loggers.unshift('>>>>>>>>>>>图片上传完成')
+              this.imageData = Math.random()
               resolve()
             })
           })
@@ -120,44 +141,58 @@
           })
         })
       },
-      androidJump () {
+      androidJump (distance) {
         this.getAndroidScreen().then(({x, y}) => {
           let config = {}
-          press_time = distance * config.press_radio
+          let press_time = distance * 2.099
           press_time = press_time > 200 ? press_time : 200
           press_time = ~~press_time
           // TODO: 坐标根据截图的 size 来计算
-          let { x1, x2, y1, y2 } = config.swipe
+          let [ x1, x2, y1, y2 ] = [374, 1060, 374, 1060]
           let cmd = `adb shell input swipe ${x1} ${y1} ${x2} ${y2} ${press_time}`
-          console.info(`>>>>>>>>>>>>>>>${cmd}`)
-          shell.exec(cmd)
+          this.loggers.unshift(`>>>>>>>>>>>>>>>${cmd}`)
+          Shell.exec(cmd, () => {})
         })
       },
       wxJump () {
         this.upLoadImg().then(() => {
-          let curImg = ImageMagick(LOCAL_IMG_PATH + IMG_NAME)
-          get_center_point(curImg, ([piece_x, piece_y, board_x, board_y]) => {
-            console.log(piece_x, piece_y, board_x, board_x)
-            androidJump(Math.sqrt(Math.abs(board_x - piece_x) ** 2 + Math.abs(board_y - piece_y) ** 2))
-            setTimeout(() => {
-              init(img)
-            }, 3500)
+          this.$image = this.$electron.nativeImage.createFromPath(IMG_PATH)
+          this.getCenterPoint(([piece_x, piece_y, board_x, board_y]) => {
+            this.loggers.unshift(`${piece_x}, ${piece_y}, ${board_x}, ${board_x}`)
+            this.androidJump(Math.sqrt(Math.abs(board_x - piece_x) ** 2 + Math.abs(board_y - piece_y) ** 2))
+            this.$timer = setTimeout(() => {
+              this.wxJump()
+            }, 2000)
           })
         })
+      },
+      stopJump () {
+        this.$timer && clearTimeout(this.$timer)
+        // 防止清除不到
+        this.$count = this.$count || 1
+        if (!this.$timer && this.$count < 3) {
+          this.$count ++
+          setTimeout(() => {
+            this.$timer && clearTimeout(this.$timer)
+          }, 500)
+        }
       }
     }
   }
 </script>
 <style lang="scss" scoped>
   .wx-jump-wrapper{
-    .btn-start{
-
-    }
     .logger-wrapper{
       width: 600px;
       height: 400px;
       border: 1px solid #ccc;
       overflow-y: auto;
+      .logger-item{
+        padding: 0;
+        margin: 0;
+        line-height: 24px;
+        color: #ccc;
+      }
     }
   }
 </style>
