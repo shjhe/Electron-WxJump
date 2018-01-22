@@ -1,6 +1,6 @@
 <template>
   <div class="wx-jump-wrapper">
-    <el-button type="primary" @click="wxJump">开始</el-button>
+    <el-button type="primary" @click="wxJump('start')">开始</el-button>
     <el-button type="default" @click="stopJump">停止</el-button>
     <!-- <div class="image-wrapper">
       <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
@@ -19,8 +19,11 @@
   import Shell from 'shelljs'
   import GetPixels from 'get-pixels'
   import { PHONE_SETTING, IMG_SETTING }  from '@/config'
-  // const DIR_PATH = path.join(__static, '../../../../')
-  const DIR_PATH = __static
+  // 打包后路径不一样 因为需要上传文件并读取
+  // 上传图片放置根目录的temp文件夹 需要在package.json中配置 并创建temp目录
+  const IS_DEV = process.env.NODE_ENV !== 'production'
+  const DIR_PATH = IS_DEV ? path.join(__static, '../temp') : path.join(__static, '../../../../../temp')
+  const ADB_PATH = IS_DEV ? path.join(__static, '../Tools/Adb/adb.exe') : path.join(__static, '../../../../../Tools/Adb/adb.exe')
   const IMG_PATH = path.join(DIR_PATH, IMG_SETTING.NAME)
   Shell.config.silent = true
   Shell.config.execPath = 'C:\\WINDOWS\\system32\\cmd.exe' // 'C:\\Program Files\\nodejs\\node.exe'
@@ -33,7 +36,10 @@
         btnState: true,
         loggers: [],
         imageRandom: Math.random(),
-        tips: []
+        tips: [],
+        state: {
+          isConnect: false
+        }
       }
     },
     created () {
@@ -116,9 +122,9 @@
       upLoadImg () {
         return new Promise((resolve) => {
           this.loggers.unshift('>>>>>>>>>>>截取图片')
-          Shell.exec(`adb shell screencap -p /sdcard/${IMG_SETTING.NAME}`, () => {
+          Shell.exec(`${ADB_PATH} shell screencap -p /sdcard/${IMG_SETTING.NAME}`, () => {
             this.loggers.unshift('>>>>>>>>>>>上传图片')
-            Shell.exec(`adb pull /sdcard/${IMG_SETTING.NAME} ${this.DIR_STATIC}`, () => {
+            Shell.exec(`${ADB_PATH} pull /sdcard/${IMG_SETTING.NAME} ${this.DIR_STATIC}`, () => {
               this.loggers.unshift('>>>>>>>>>>>图片上传完成')
               this.imageData = Math.random()
               resolve()
@@ -129,7 +135,7 @@
       // 获取安卓分辨率
       getAndroidScreen () {
         return new Promise((resolve, reject) => {
-          Shell.exec('adb shell "dumpsys window | grep mUnrestrictedScreen"', function (code, stdout, stderr) {
+          Shell.exec(`${ADB_PATH} shell "dumpsys window | grep mUnrestrictedScreen"`, function (code, stdout, stderr) {
             if (code == 0) {
               var newStdout = stdout.split(')')[1].match(/(\d+)(\d+)/g)
               resolve({
@@ -149,33 +155,29 @@
           press_time = ~~press_time
           // TODO: 坐标根据截图的 size 来计算
           let [ x1, x2, y1, y2 ] = [374, 1060, 374, 1060]
-          let cmd = `adb shell input swipe ${x1} ${y1} ${x2} ${y2} ${press_time}`
+          let cmd = `${ADB_PATH} shell input swipe ${x1} ${y1} ${x2} ${y2} ${press_time}`
           this.loggers.unshift(`>>>>>>>>>>>>>>>${cmd}`)
           Shell.exec(cmd, () => {})
         })
       },
-      wxJump () {
+      wxJump (type) {
+        if (type === 'start') {
+          // 如果为开始按钮 则强制开始
+          this.$isStop = false
+        }
         this.upLoadImg().then(() => {
           this.$image = this.$electron.nativeImage.createFromPath(IMG_PATH)
           this.getCenterPoint(([piece_x, piece_y, board_x, board_y]) => {
             this.loggers.unshift(`${piece_x}, ${piece_y}, ${board_x}, ${board_x}`)
             this.androidJump(Math.sqrt(Math.abs(board_x - piece_x) ** 2 + Math.abs(board_y - piece_y) ** 2))
             this.$timer = setTimeout(() => {
-              this.wxJump()
+              !this.$isStop && this.wxJump()
             }, 2000)
           })
         })
       },
       stopJump () {
-        this.$timer && clearTimeout(this.$timer)
-        // 防止清除不到
-        this.$count = this.$count || 1
-        if (!this.$timer && this.$count < 3) {
-          this.$count ++
-          setTimeout(() => {
-            this.$timer && clearTimeout(this.$timer)
-          }, 500)
-        }
+        this.$isStop = true
       }
     }
   }
