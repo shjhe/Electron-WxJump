@@ -25,6 +25,9 @@
     "files": [
       "dist/electron/**/*"
     ],
+    "extraFiles": [
+      "temp/**/*"
+    ],
     "dmg": {
       "contents": [
         {
