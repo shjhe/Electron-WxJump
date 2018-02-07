@@ -2,16 +2,16 @@
   <div class="wx-jump-wrapper">
     <el-button type="primary" @click="wxJump('start')">开始</el-button>
     <el-button type="default" @click="stopJump">停止</el-button>
-    <div class="image-wrapper">
+    <!-- <div class="image-wrapper">
       <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
         left: tip[0] + 'px',
         top: tip[1] + 'px'
       }"></span>
       <img :key="imageData" src="../../../temp/wxJumpTemp.png" width="720px">
-    </div>
-    <!-- <div class="logger-wrapper" ref="loggerRef">
-      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
     </div> -->
+    <div class="logger-wrapper" ref="loggerRef">
+      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
+    </div>
   </div>
 </template>
 <script>
