@@ -2,16 +2,16 @@
   <div class="wx-jump-wrapper">
     <el-button type="primary" @click="wxJump('start')">开始</el-button>
     <el-button type="default" @click="stopJump">停止</el-button>
-    <!-- <div class="image-wrapper">
+    <div class="image-wrapper">
       <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
-        top: tip.top/2 + 'px',
-        left: tip.left/2 + 'px'
+        left: tip[0] + 'px',
+        top: tip[1] + 'px'
       }"></span>
-      <img :key="imageData" :src="`${DIR_STATIC}/wxJumpTemp.png?v=${imageData}`" width="50%">
-    </div> -->
-    <div class="logger-wrapper" ref="loggerRef">
-      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
+      <img :key="imageData" src="../../../temp/wxJumpTemp.png" width="720px">
     </div>
+    <!-- <div class="logger-wrapper" ref="loggerRef">
+      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
+    </div> -->
   </div>
 </template>
 <script>
@@ -44,7 +44,6 @@
     },
     created () {
       window.tyler = this
-      console.log(__static)
     },
     methods: {
       getCenterPoint (callback) {
@@ -53,67 +52,131 @@
             this.loggers.push(JSON.stringify(err))
             return
           }
+          
           let data = this.findPoint(pixels)
           callback(data)
         })
       },
       findPoint (pixels) {
+        // 查找目标位置
         let piece_x_sum = 0,
             piece_x_c = 0,
             piece_y_max = 0,
+            piece_x = 0,
+            piece_y = 0,
+            board_x_start = 0,
+            board_x_end = 0,
+            board_x_sum = 0,
+            board_x_c = 0,
             board_x = 0,
             board_y = 0;
-        let { width, height } = this.$image.getSize()
-        for(var y = 0; y < height; y++) {
-          for(var x = 0; x < width; x ++) {
-            var pixel0 = pixels.get(x, y, 0),
+            let { width, height } = this.$image.getSize()
+        let scan_x_border = Math.floor(width/8) // 扫描棋子时的左右边界
+        let scan_start_y = 0  // 扫描的起始 y 坐标
+        // 以 50px 步长，尝试探测 scan_start_y
+        for(let y = Math.floor(height/3); y < Math.floor(height*2/3); y+=50) {
+          let last_pixel0 = pixels.get(0, y, 0);
+          let last_pixel1 = pixels.get(0, y, 1);
+          let last_pixel2 = pixels.get(0, y, 2);
+          for(var x = 1; x < width; x ++) {
+            let pixel0 = pixels.get(x, y, 0),
                 pixel1 = pixels.get(x, y, 1),
                 pixel2 = pixels.get(x, y, 2);
-            if ((50 < pixel0 && pixel0 < 60) && (53 < pixel1 && pixel1 < 63) && (95 < pixel2 && pixel2 < 110)) {
-              piece_x_sum += x
-              piece_x_c += 1
-              piece_y_max = y > piece_y_max ? y : piece_y_max
+            // 不是纯色的线，则记录 scan_start_y 的值，准备跳出循环
+            if (pixel0 != last_pixel0 || pixel1 != last_pixel1 || pixel2 != last_pixel2) {
+              scan_start_y = y - 50
+              break
             }
           }
+          if(scan_start_y) {
+            break
+          }
+        }
+        // console.info(`scan_start_y: ${scan_start_y}`)
+
+        // 从 scan_start_y 开始往下扫描，棋子应位于屏幕上半部分，这里暂定不超过 2/3
+        for(let y = scan_start_y; y < Math.floor(height*2/3); y++) {
+            for(let x = scan_x_border; x < (width - scan_x_border); x++){  // 横坐标方面也减少了一部分扫描开销
+              let pixel0 = pixels.get(x, y, 0),
+                  pixel1 = pixels.get(x, y, 1),
+                  pixel2 = pixels.get(x, y, 2);
+              // 根据棋子的最低行的颜色判断，找最后一行那些点的平均值，这个颜色这样应该 OK，暂时不提出来
+              if ((50 < pixel0 && pixel0 < 60) && (53 < pixel1 && pixel1 < 63) && (95 < pixel2 && pixel2 < 110)) {
+                piece_x_sum += x
+                piece_x_c += 1
+                piece_y_max = y > piece_y_max ? y : piece_y_max
+              }
+            }
         }
         if (!piece_x_sum || !piece_x_c) {
           return [0,0,0,0]
         }
-        let piece_x = piece_x_sum / piece_x_c;
-        let piece_y = piece_y_max - 20;  // 上移棋子底盘高度的一半
+        piece_x = Math.floor(piece_x_sum / piece_x_c)
+        piece_y = piece_y_max - 20 // - (13 || config.half_height)  // 上移棋子底盘高度的一半
 
-
-        for (var y = 0; y < height; y++){
-          if (y < 300) {
-            continue
-          }
+        // 限制棋盘扫描的横坐标，避免音符 bug
+        if(piece_x < width/2){
+          board_x_start = piece_x
+          board_x_end = width
+        } else {
+          board_x_start = 0
+          board_x_end = piece_x
+        }
+        let cur_y = 0 // 记录本次循环最大值 用作下一次处理
+        for(cur_y = Math.floor(height/3); cur_y < Math.floor(height*2/3); cur_y++) {
+          let last_pixel0 = pixels.get(0, cur_y, 0);
+          let last_pixel1 = pixels.get(0, cur_y, 1);
+          let last_pixel2 = pixels.get(0, cur_y, 2);
           if (board_x || board_y) {
-            break;
+            break
           }
-          var last_pixel0 = pixels.get(0, y, 0);
-          var last_pixel1 = pixels.get(0, y, 1);
-          var last_pixel2 = pixels.get(0, y, 2);
-          let board_x_sum = 0
-          let board_x_c = 0
-          for (var x = 0; x < width; x++) {
-            var pixel0 = pixels.get(x, y, 0),
-                pixel1 = pixels.get(x, y, 1),
-                pixel2 = pixels.get(x, y, 2);
-            //修掉脑袋比下一个小格子还高的情况的 bug
-            if (Math.abs(x - piece_x) < 70) {
+          board_x_sum = 0
+          board_x_c = 0
+          for(let x = Math.floor(board_x_start); x < Math.floor(board_x_end);x++) {
+            let pixel0 = pixels.get(x, cur_y, 0),
+                pixel1 = pixels.get(x, cur_y, 1),
+                pixel2 = pixels.get(x, cur_y, 2);
+            // 修掉脑袋比下一个小格子还高的情况的 bug
+            if (Math.abs(x - piece_x) < (47 || config.piece_body_width)) {
               continue
             }
-            //修掉圆顶的时候一条线导致的小 bug
+            // 修掉圆顶的时候一条线导致的小 bug，这个颜色判断应该 OK，暂时不提出来
             if (Math.abs(pixel0 - last_pixel0) + Math.abs(pixel1 - last_pixel1) + Math.abs(pixel2 - last_pixel2) > 10){
               board_x_sum += x
               board_x_c += 1
             }
+
           }
           if (board_x_sum) {
             board_x = board_x_sum / board_x_c
           }
         }
-        board_y = piece_y + Math.abs(board_x - piece_x) * Math.abs(1122 - 831) / Math.abs(813 - 310)   // 按实际的角度来算，找到接近下一个 board 中心的坐标
+        let last_pixel0 = pixels.get(board_x, cur_y, 0);
+        let last_pixel1 = pixels.get(board_x, cur_y, 1);
+        let last_pixel2 = pixels.get(board_x, cur_y, 2);
+        // 从上顶点往下 +274 的位置开始向上找颜色与上顶点一样的点，为下顶点
+        // 该方法对所有纯色平面和部分非纯色平面有效，对高尔夫草坪面、木纹桌面、药瓶和非菱形的碟机（好像是）会判断错误
+        let down_y = 0
+        for(down_y = cur_y + 274; down_y > cur_y; down_y--) {
+          let pixel0 = pixels.get(board_x, down_y, 0),
+            pixel1 = pixels.get(board_x, down_y, 1),
+            pixel2 = pixels.get(board_x, down_y, 2);
+          if(Math.abs(pixel0 - last_pixel0) + Math.abs(pixel1 - last_pixel1) + Math.abs(pixel2 - last_pixel2) < 10){
+            break
+          }
+        }
+        board_y = Math.floor((cur_y + down_y) / 2)
+        // 如果上一跳命中中间，则下个目标中心会出现 r245 g245 b245 的点，利用这个属性弥补上一段代码可能存在的判断错误
+        // 若上一跳由于某种原因没有跳到正中间，而下一跳恰好有无法正确识别花纹，则有可能游戏失败，由于花纹面积通常比较大，失败概率较低
+        for(let i = cur_y; i < cur_y + 200; i++) {
+          let pixel0 = pixels.get(board_x, i, 0),
+            pixel1 = pixels.get(board_x, i, 1),
+            pixel2 = pixels.get(board_x, i, 2);
+          if(Math.abs(pixel0 - 245) + Math.abs(pixel1 - 245) + Math.abs(pixel2 - 245) == 0) {
+            board_y = i + 10
+            break
+          }
+        }
         if (!board_x || !board_y) {
           return [0,0,0,0]
         }
@@ -195,6 +258,13 @@
         line-height: 24px;
         color: #ccc;
       }
+    }
+    .tips{
+      position: absolute;
+      z-index: 999;
+      width: 4px;
+      height: 4px;
+      background-color: red;
     }
   }
 </style>
