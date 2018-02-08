@@ -8,6 +8,11 @@ export default new Router({
     {
       path: '/',
       name: 'wx-jump',
+      component: require('@/components/Index').default
+    },
+    {
+      path: '/jump',
+      name: 'wx-jump',
       component: require('@/components/WxJump').default
     },
     {
