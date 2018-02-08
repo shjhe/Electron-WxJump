@@ -1,17 +1,26 @@
 <template>
   <div class="wx-jump-wrapper">
-    <el-button type="primary" @click="wxJump('start')">开始</el-button>
-    <el-button type="default" @click="stopJump">停止</el-button>
-    <!-- <div class="image-wrapper">
-      <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
-        left: tip[0] + 'px',
-        top: tip[1] + 'px'
-      }"></span>
-      <img :key="imageData" src="../../../temp/wxJumpTemp.png" width="720px">
-    </div> -->
-    <div class="logger-wrapper" ref="loggerRef">
-      <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{item}}</p>
-    </div>
+    <el-row>
+      <el-col :span="8">
+        <div class="image-wrapper">
+          <span class="tips" v-for="(tip, index) in tips" :key="index" :style="{
+            left: tip[0] + 'px',
+            top: tip[1] + 'px'
+          }"></span>
+          <img :key="imageData" :src="`${TEMP_PATH}/wxJumpTemp.png?${Math.random()}`" width="100%">
+        </div>
+      </el-col>
+      <el-col :span="15" :offset="1">
+        <el-scrollbar class="logger-wrapper" ref="loggerRef">
+          <p class="logger-item" v-for="(item, index) in loggers" :key="index">{{`>>>${item}`}}</p>
+        </el-scrollbar>
+        <div class="controller-wrapper">
+          <el-button type="primary" @click="wxJump('start')">开始</el-button>
+          <el-button type="default" @click="stopJump">停止</el-button>
+          <!-- <el-button type="info">配置</el-button> -->
+        </div>
+      </el-col>
+    </el-row>
   </div>
 </template>
 <script>
@@ -22,7 +31,8 @@
   // 打包后路径不一样 因为需要上传文件并读取
   // 上传图片放置根目录的temp文件夹 需要在package.json中配置 并创建temp目录
   const IS_DEV = process.env.NODE_ENV !== 'production'
-  const DIR_PATH = IS_DEV ? path.join(__static, '../temp') : path.join(__static, '../../../../../temp')
+  const TEMP_PATH = IS_DEV ? '../temp' : '../../../../../temp'
+  const DIR_PATH = path.join(__static, TEMP_PATH)
   const ADB_PATH = IS_DEV ? path.join(__static, '../Tools/Adb/adb.exe') : path.join(__static, '../../../../../Tools/Adb/adb.exe')
   const IMG_PATH = path.join(DIR_PATH, IMG_SETTING.NAME)
   Shell.config.silent = true
@@ -31,6 +41,7 @@
     data () {
       return {
         DIR_STATIC: DIR_PATH,
+        TEMP_PATH,
         imageData: '',
         imageState: true,
         btnState: true,
@@ -184,11 +195,11 @@
       },
       upLoadImg () {
         return new Promise((resolve) => {
-          this.loggers.unshift('>>>>>>>>>>>截取图片')
+          this.loggers.unshift('截取图片')
           Shell.exec(`${ADB_PATH} shell screencap -p /sdcard/${IMG_SETTING.NAME}`, () => {
-            this.loggers.unshift('>>>>>>>>>>>上传图片')
+            this.loggers.unshift('上传图片')
             Shell.exec(`${ADB_PATH} pull /sdcard/${IMG_SETTING.NAME} ${this.DIR_STATIC}`, () => {
-              this.loggers.unshift('>>>>>>>>>>>图片上传完成')
+              this.loggers.unshift('图片上传完成')
               this.imageData = Math.random()
               resolve()
             })
@@ -212,14 +223,19 @@
       },
       androidJump (distance) {
         this.getAndroidScreen().then(({x, y}) => {
-          let config = {}
+          let config = PHONE_SETTING[`${y}X${x}`] || PHONE_SETTING.default
           let press_time = distance * 2.099
           press_time = press_time > 200 ? press_time : 200
           press_time = ~~press_time
           // TODO: 坐标根据截图的 size 来计算
-          let [ x1, x2, y1, y2 ] = [374, 1060, 374, 1060]
+          let [ x1, x2, y1, y2 ] = [
+            374 + Math.ceil(Math.random() * 10 + 1),
+            1060 + Math.ceil(Math.random() * 10 + 1),
+            374 + Math.ceil(Math.random() * 10 + 1),
+            1060 + Math.ceil(Math.random() * 10 + 1)
+          ]
           let cmd = `${ADB_PATH} shell input swipe ${x1} ${y1} ${x2} ${y2} ${press_time}`
-          this.loggers.unshift(`>>>>>>>>>>>>>>>${cmd}`)
+          this.loggers.unshift(`第${this.$totalNum || 1}按压 位置${x1} ${y1} ${x2} ${y2} 时长${press_time}`)
           Shell.exec(cmd, () => {})
         })
       },
@@ -233,9 +249,20 @@
           this.getCenterPoint(([piece_x, piece_y, board_x, board_y]) => {
             this.loggers.unshift(`${piece_x}, ${piece_y}, ${board_x}, ${board_x}`)
             this.androidJump(Math.sqrt(Math.abs(board_x - piece_x) ** 2 + Math.abs(board_y - piece_y) ** 2))
+            let timer = 0
+            this.$totalNum = this.$totalNum || 0
+            this.$totalNum ++
+            this.$num = this.$num || 1
+            if (this.$num >= Math.ceil(Math.random() * 20 + 20)) {
+              timer = Math.ceil(Math.random() * 10 + 20) * 1000
+              this.$num = 1
+            } else {
+              timer = Math.ceil(Math.random() * 20 + 30) * 100
+              this.$num += 1
+            }
             this.$timer = setTimeout(() => {
               !this.$isStop && this.wxJump()
-            }, 2000)
+            }, timer)
           })
         })
       },
@@ -248,16 +275,23 @@
 <style lang="scss" scoped>
   .wx-jump-wrapper{
     .logger-wrapper{
-      width: 600px;
-      height: 400px;
+      width: 100%;
+      height: 480px;
+      padding: 10px 0;
       border: 1px solid #ccc;
-      overflow-y: auto;
+      background-color: #eee;
+      border-radius: 6px;
+      overflow-x: hidden;
       .logger-item{
-        padding: 0;
+        padding: 0 10px;
         margin: 0;
         line-height: 24px;
-        color: #ccc;
+        color: #666;
       }
+    }
+    .controller-wrapper{
+      margin-top: 10px;
+      text-align: center
     }
     .tips{
       position: absolute;
@@ -268,3 +302,13 @@
     }
   }
 </style>
+<style lang="scss">
+  .wx-jump-wrapper{
+    .logger-wrapper{
+      .el-scrollbar__wrap{
+        overflow-x: hidden;
+      }
+    }
+  }
+</style>
+
